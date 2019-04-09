@@ -7,8 +7,8 @@ import kanela.agent.api.instrumentation.mixin.Initializer
 
 /**
   * Mixin that exposes access to a Context instance captured by an instrumented instance. The interface exposes means of
-  * getting and updating a Context member, but it does not prescribe any ordering or thread safety guarantees, please
-  * refer to the available mixins for more details.
+  * getting and updating a Context instance, but it does not prescribe any ordering or thread safety guarantees, please
+  * refer to the available implementations for more details.
   */
 trait HasContext {
 

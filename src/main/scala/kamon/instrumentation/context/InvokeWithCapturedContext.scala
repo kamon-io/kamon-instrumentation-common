@@ -7,10 +7,9 @@ import kamon.context.Storage
 import kanela.agent.libs.net.bytebuddy.asm.Advice
 
 /**
-  * Advice that sets the Context from a HasContext instance as the current Context while a method on the instrumented
-  * instance runs.
+  * Advice that sets the Context from a HasContext instance as the current Context while the advised method is invoked.
   */
-object RunWithContextAdvice {
+object InvokeWithCapturedContext {
 
   @Advice.OnMethodEnter
   def enter(@Advice.This hasContext: HasContext): Storage.Scope =

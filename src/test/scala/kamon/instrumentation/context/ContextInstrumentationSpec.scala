@@ -2,8 +2,8 @@ package kamon.instrumentation.context
 
 import kamon.Kamon
 import kamon.context.Context
-import kamon.instrumentation.builder.InstrumentationBuilder
 import kamon.tag.TagSet
+import kanela.agent.api.instrumentation.InstrumentationBuilder
 import org.scalatest.{Matchers, WordSpec}
 
 class ContextInstrumentationSpec extends WordSpec with Matchers {
@@ -16,7 +16,7 @@ class ContextInstrumentationSpec extends WordSpec with Matchers {
     }
 
     "allow to update the Context held by the instrumented instances" in {
-      val context = Context.of(TagSet.from("key", "value"))
+      val context = Context.of(TagSet.of("key", "value"))
       val target = (new Target).asInstanceOf[HasContext]
       val targetWithInitializer = (new TargetWithInitializer).asInstanceOf[HasContext]
 
@@ -28,7 +28,7 @@ class ContextInstrumentationSpec extends WordSpec with Matchers {
     }
 
     "automatically capture the current context when using the WithCurrentContextInitializer variant" in {
-      val context = Context.of(TagSet.from("key", "value"))
+      val context = Context.of(TagSet.of("key", "value"))
       val targetWithInitializer = Kamon.withContext(context) {
         (new TargetWithInitializer).asInstanceOf[HasContext]
       }
@@ -37,7 +37,7 @@ class ContextInstrumentationSpec extends WordSpec with Matchers {
     }
 
     "trigger copying of the current context into the instrumented instance with using the CaptureCurrentContextAdvice" in {
-      val context = Context.of(TagSet.from("key", "value"))
+      val context = Context.of(TagSet.of("key", "value"))
       val target = new Target
       val targetWithInitializer = new TargetWithInitializer
 
@@ -54,7 +54,7 @@ class ContextInstrumentationSpec extends WordSpec with Matchers {
     }
 
     "use the captured context while running methods advised with the RunWithContextAdvice" in {
-      val context = Context.of(TagSet.from("key", "value"))
+      val context = Context.of(TagSet.of("key", "value"))
 
       val (target, targetWithInitializer) = Kamon.withContext(context) {
         (new Target, new TargetWithInitializer)
@@ -93,16 +93,16 @@ object ContextInstrumentationSpec {
 
   class Instrumentation extends InstrumentationBuilder {
 
-    onType("kamon.instrumentation.context.ContextInstrumentationSpec$Target") {
-      mixin(classOf[HasContext.Mixin])
-      advise(method("doSomething"), CaptureCurrentContextAdvice)
-      advise(method("doWork"), RunWithContextAdvice)
-    }
+    onType("kamon.instrumentation.context.ContextInstrumentationSpec$Target")
+      .mixin(classOf[HasContext.Mixin])
+      .advise(method("doSomething"), CaptureCurrentContext)
+      .advise(method("doWork"), InvokeWithCapturedContext)
 
-    onType("kamon.instrumentation.context.ContextInstrumentationSpec$TargetWithInitializer") {
-      mixin(classOf[HasContext.MixinWithInitializer])
-      advise(method("doSomething"), CaptureCurrentContextAdvice)
-      advise(method("doWork"), RunWithContextAdvice)
-    }
+
+    onType("kamon.instrumentation.context.ContextInstrumentationSpec$TargetWithInitializer")
+      .mixin(classOf[HasContext.MixinWithInitializer])
+      .advise(method("doSomething"), CaptureCurrentContext)
+      .advise(method("doWork"), InvokeWithCapturedContext)
+
   }
 }
