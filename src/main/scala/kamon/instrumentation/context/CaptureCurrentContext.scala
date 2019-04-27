@@ -9,7 +9,7 @@ import kanela.agent.libs.net.bytebuddy.asm.Advice
   */
 object CaptureCurrentContext {
 
-  @Advice.OnMethodExit
+  @Advice.OnMethodExit(onThrowable = classOf[Throwable], suppress = classOf[Throwable])
   def exit(@Advice.This hasContext: HasContext): Unit =
     hasContext.setContext(Kamon.currentContext())
 }

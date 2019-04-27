@@ -2,6 +2,7 @@ package kamon.instrumentation.context
 
 import kamon.Kamon
 import kamon.context.Context
+import kamon.instrumentation.context.java.InvokeWithCapturedContext
 import kamon.tag.TagSet
 import kanela.agent.api.instrumentation.InstrumentationBuilder
 import org.scalatest.{Matchers, WordSpec}
@@ -102,7 +103,7 @@ object ContextInstrumentationSpec {
     onType("kamon.instrumentation.context.ContextInstrumentationSpec$TargetWithInitializer")
       .mixin(classOf[HasContext.MixinWithInitializer])
       .advise(method("doSomething"), CaptureCurrentContext)
-      .advise(method("doWork"), InvokeWithCapturedContext)
+      .advise(method("doWork"), classOf[kamon.instrumentation.context.java.InvokeWithCapturedContext])
 
   }
 }

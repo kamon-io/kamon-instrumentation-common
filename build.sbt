@@ -6,9 +6,9 @@ lazy val kanelaKamonExtension = (project in file("."))
     moduleName := name.value,
     resolvers += Resolver.mavenLocal,
     libraryDependencies ++= Seq(
-      "io.kamon" %% "kamon-core"    % "2.0.0-20abd7cdb734fa6a5578a274931ec8d5eea9e06d",
-      "io.kamon" %  "kanela-agent"  % "0.0.17" % "provided",
-
+      "io.kamon" %% "kamon-core"    % "2.0.0-M3",
+      "io.kamon" %  "kanela-agent"  % "1.0.0-M1" % "provided",
       scalatest % "test"
     )
   )
+

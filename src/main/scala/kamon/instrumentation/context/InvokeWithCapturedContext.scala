@@ -11,11 +11,11 @@ import kanela.agent.libs.net.bytebuddy.asm.Advice
   */
 object InvokeWithCapturedContext {
 
-  @Advice.OnMethodEnter
+  @Advice.OnMethodEnter(suppress = classOf[Throwable])
   def enter(@Advice.This hasContext: HasContext): Storage.Scope =
     Kamon.storeContext(hasContext.context)
 
-  @Advice.OnMethodExit(onThrowable = classOf[Throwable])
+  @Advice.OnMethodExit(onThrowable = classOf[Throwable], suppress = classOf[Throwable])
   def exit(@Advice.Enter scope: Storage.Scope): Unit =
     scope.close()
 }
