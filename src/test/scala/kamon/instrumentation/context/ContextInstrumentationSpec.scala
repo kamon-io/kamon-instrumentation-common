@@ -29,7 +29,7 @@ class ContextInstrumentationSpec extends WordSpec with Matchers {
 
     "automatically capture the current context when using the WithCurrentContextInitializer variant" in {
       val context = Context.of(TagSet.of("key", "value"))
-      val targetWithInitializer = Kamon.withContext(context) {
+      val targetWithInitializer = Kamon.storeContext(context) {
         (new TargetWithInitializer).asInstanceOf[HasContext]
       }
 
@@ -44,7 +44,7 @@ class ContextInstrumentationSpec extends WordSpec with Matchers {
       target.asInstanceOf[HasContext].context shouldBe Context.Empty
       targetWithInitializer.asInstanceOf[HasContext].context shouldBe Context.Empty
 
-      Kamon.withContext(context) {
+      Kamon.storeContext(context) {
         target.doSomething()
         targetWithInitializer.doSomething()
       }
@@ -56,7 +56,7 @@ class ContextInstrumentationSpec extends WordSpec with Matchers {
     "use the captured context while running methods advised with the RunWithContextAdvice" in {
       val context = Context.of(TagSet.of("key", "value"))
 
-      val (target, targetWithInitializer) = Kamon.withContext(context) {
+      val (target, targetWithInitializer) = Kamon.storeContext(context) {
         (new Target, new TargetWithInitializer)
       }
 
@@ -95,13 +95,13 @@ object ContextInstrumentationSpec {
 
     onType("kamon.instrumentation.context.ContextInstrumentationSpec$Target")
       .mixin(classOf[HasContext.Mixin])
-      .advise(method("doSomething"), CaptureCurrentContext)
+      .advise(method("doSomething"), CaptureCurrentContextOnExit)
       .advise(method("doWork"), InvokeWithCapturedContext)
 
 
     onType("kamon.instrumentation.context.ContextInstrumentationSpec$TargetWithInitializer")
       .mixin(classOf[HasContext.MixinWithInitializer])
-      .advise(method("doSomething"), CaptureCurrentContext)
+      .advise(method("doSomething"), CaptureCurrentContextOnExit)
       .advise(method("doWork"), InvokeWithCapturedContext)
 
   }

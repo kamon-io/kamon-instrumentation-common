@@ -13,7 +13,7 @@ object InvokeWithCapturedContext {
 
   @Advice.OnMethodEnter
   def enter(@Advice.This hasContext: HasContext): Storage.Scope =
-    Kamon.storeContext(hasContext.context)
+    Kamon.store(hasContext.context)
 
   @Advice.OnMethodExit(onThrowable = classOf[Throwable])
   def exit(@Advice.Enter scope: Storage.Scope): Unit =

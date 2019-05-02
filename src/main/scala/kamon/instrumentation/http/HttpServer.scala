@@ -355,7 +355,7 @@ object HttpServer {
       val span = Kamon.serverSpanBuilder(operationName(request), component)
 
       if(!settings.enableSpanMetrics)
-        span.disableMetrics()
+        span.doNotTrackMetrics()
 
 
       for { traceIdTag <- settings.traceIDTag; customTraceID <- context.getTag(option(traceIdTag)) } {
