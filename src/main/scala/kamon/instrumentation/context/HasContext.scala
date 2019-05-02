@@ -27,15 +27,33 @@ trait HasContext {
 object HasContext {
 
   /**
-    * HasContext implementation that keeps the Context reference in a mutable variable.
+    * HasContext implementation that keeps the Context reference in a mutable field.
     */
   class Mixin extends HasContext {
 
     // NOTE: It doesn't really matter if we initialize this member here because the initialization code is not copied
     //       to the instrumented classes' constructor. The only way to ensure that a value is assigned to this member is
-    //       to use the HasContextMixin.WithCurrentContextInitializer variant or to apply additional instrumentation that
-    //       will assign the right Context instance using the setContext method.
+    //       to use the HasContext.MixinWithInitializer variant or to apply additional instrumentation that assigns the
+    //       right Context instance using the setContext method, like the CaptureCurrentContext advice.
     private var _context: Context = Context.Empty
+
+    override def context: Context =
+      if(_context != null) _context else Context.Empty
+
+    override def setContext(context: Context): Unit =
+      _context = context
+  }
+
+  /**
+    * HasContext implementation that keeps the Context reference in a volatile field.
+    */
+  class VolatileMixin extends HasContext {
+
+    // NOTE: It doesn't really matter if we initialize this member here because the initialization code is not copied
+    //       to the instrumented classes' constructor. The only way to ensure that a value is assigned to this member is
+    //       to use the HasContext.MixinWithInitializer variant or to apply additional instrumentation that assigns the
+    //       right Context instance using the setContext method, like the CaptureCurrentContext advice.
+    @volatile private var _context: Context = Context.Empty
 
     override def context: Context =
       if(_context != null) _context else Context.Empty
@@ -46,11 +64,29 @@ object HasContext {
 
 
   /**
-    * HasContext implementation that that keeps the ContextReference in a mutable variable and initializes it with the
+    * HasContext implementation that that keeps the ContextReference in a mutable field and initializes it with the
     * current Context held by Kamon.
     */
   class MixinWithInitializer extends HasContext {
     private var _context: Context = Context.Empty
+
+    override def context: Context =
+      _context
+
+    override def setContext(context: Context): Unit =
+      _context = context
+
+    @Initializer
+    def initialize(): Unit =
+      setContext(Kamon.currentContext())
+  }
+
+  /**
+    * HasContext implementation that that keeps the ContextReference in a volatile field and initializes it with the
+    * current Context held by Kamon.
+    */
+  class VolatileMixinWithInitializer extends HasContext {
+    @volatile private var _context: Context = Context.Empty
 
     override def context: Context =
       _context
