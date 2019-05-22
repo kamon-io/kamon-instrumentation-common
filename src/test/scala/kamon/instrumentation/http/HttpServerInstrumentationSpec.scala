@@ -2,10 +2,13 @@ package kamon.instrumentation.http
 
 import java.time.Duration
 
+import com.typesafe.config.ConfigFactory
+import kamon.Kamon
 import kamon.context.Context
 import kamon.tag.Lookups._
 import kamon.metric.{Counter, Histogram, RangeSampler, Timer}
 import kamon.testkit.{InstrumentInspection, SpanInspection}
+import kamon.trace.Trace.SamplingDecision
 import org.scalatest.concurrent.Eventually
 import org.scalatest.{Matchers, OptionValues, WordSpec}
 
@@ -17,19 +20,19 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
   "the HTTP server instrumentation" when {
     "configured for context propagation" should {
       "read context entries and tags from the incoming request" in {
-        val handler = httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map(
+        val handler = httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map(
           "context-tags" -> "tag=value;none=0011223344556677;",
           "custom-trace-id" -> "0011223344556677"
         )))
 
         handler.context.tags.get(plain("tag")) shouldBe "value"
         handler.context.tags.get(plain("none")) shouldBe "0011223344556677"
-        handler.send(fakeResponse(200, mutable.Map.empty), Context.Empty)
-        handler.doneSending(0L)
+        handler.buildResponse(fakeResponse(200, mutable.Map.empty), Context.Empty)
+        handler.responseSent(0L)
       }
 
       "use the configured HTTP propagation channel" in {
-        val handler = httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map(
+        val handler = httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map(
           "context-tags" -> "tag=value;none=0011223344556677;",
           "custom-trace-id" -> "0011223344556677"
         )))
@@ -43,8 +46,8 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
         span.tags().get(plain("http.url")) shouldBe "http://localhost:8080/"
 
         val responseHeaders = mutable.Map.empty[String, String]
-        handler.send(fakeResponse(200, responseHeaders), handler.context.withTag("hello", "world"))
-        handler.doneSending(0L)
+        handler.buildResponse(fakeResponse(200, responseHeaders), handler.context.withTag("hello", "world"))
+        handler.responseSent(0L)
       }
     }
 
@@ -52,15 +55,15 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
       "track the number of open connections" in {
         openConnections(8081).distribution()
 
-        httpServer().openConnection()
-        httpServer().openConnection()
+        httpServer().connectionOpened()
+        httpServer().connectionOpened()
 
         val snapshotWithOpenConnections = openConnections(8081).sample().distribution()
         snapshotWithOpenConnections.min shouldBe 0
         snapshotWithOpenConnections.max shouldBe 2
 
-        httpServer().closeConnection(Duration.ofSeconds(20), 10)
-        httpServer().closeConnection(Duration.ofSeconds(30), 15)
+        httpServer().connectionClosed(Duration.ofSeconds(20), 10)
+        httpServer().connectionClosed(Duration.ofSeconds(30), 15)
 
         eventually {
           val snapshotWithoutOpenConnections = openConnections(8081).distribution()
@@ -72,10 +75,10 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
       "track the distribution of number of requests handled per each connection" in {
         connectionUsage(8081).distribution()
 
-        httpServer().openConnection()
-        httpServer().openConnection()
-        httpServer().closeConnection(Duration.ofSeconds(20), 10)
-        httpServer().closeConnection(Duration.ofSeconds(30), 15)
+        httpServer().connectionOpened()
+        httpServer().connectionOpened()
+        httpServer().connectionClosed(Duration.ofSeconds(20), 10)
+        httpServer().connectionClosed(Duration.ofSeconds(30), 15)
 
         val connectionUsageSnapshot = connectionUsage(8081).distribution()
         connectionUsageSnapshot.buckets.map(_.value) should contain allOf(
@@ -87,10 +90,10 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
       "track the distribution of connection lifetime across all connections" in {
         connectionLifetime(8081).distribution()
 
-        httpServer().openConnection()
-        httpServer().openConnection()
-        httpServer().closeConnection(Duration.ofSeconds(20), 10)
-        httpServer().closeConnection(Duration.ofSeconds(30), 15)
+        httpServer().connectionOpened()
+        httpServer().connectionOpened()
+        httpServer().connectionClosed(Duration.ofSeconds(20), 10)
+        httpServer().connectionClosed(Duration.ofSeconds(30), 15)
 
         val connectionLifetimeSnapshot = connectionLifetime(8081).distribution()
         connectionLifetimeSnapshot.buckets.map(_.value) should contain allOf(
@@ -102,17 +105,17 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
       "track the number of active requests" in {
         activeRequests(8081).distribution()
 
-        val handlerOne = httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty))
-        val handlerTwo = httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty))
+        val handlerOne = httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty))
+        val handlerTwo = httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty))
 
         val snapshotWithActiveRequests = activeRequests(8081).sample().distribution()
         snapshotWithActiveRequests.min shouldBe 0
         snapshotWithActiveRequests.max shouldBe 2
 
-        handlerOne.send(fakeResponse(200, mutable.Map.empty), Context.Empty)
-        handlerTwo.send(fakeResponse(200, mutable.Map.empty), Context.Empty)
-        handlerOne.doneSending(0L)
-        handlerTwo.doneSending(0L)
+        handlerOne.buildResponse(fakeResponse(200, mutable.Map.empty), Context.Empty)
+        handlerTwo.buildResponse(fakeResponse(200, mutable.Map.empty), Context.Empty)
+        handlerOne.responseSent(0L)
+        handlerTwo.responseSent(0L)
 
         eventually {
           val snapshotWithoutActiveRequests = activeRequests(8081).distribution()
@@ -124,8 +127,8 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
       "track the distribution of sizes on incoming requests" in {
         requestSize(8081).distribution()
 
-        httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty)).doneReceiving(300)
-        httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty)).doneReceiving(400)
+        httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty)).requestReceived(300)
+        httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty)).requestReceived(400)
 
         val requestSizeSnapshot = requestSize(8081).distribution()
         requestSizeSnapshot.buckets.map(_.value) should contain allOf(
@@ -137,8 +140,8 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
       "track the distribution of sizes on outgoing responses" in {
         responseSize(8081).distribution()
 
-        httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty)).doneSending(300)
-        httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty)).doneSending(400)
+        httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty)).responseSent(300)
+        httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty)).responseSent(400)
 
         val requestSizeSnapshot = responseSize(8081).distribution()
         requestSizeSnapshot.buckets.map(_.value) should contain allOf(
@@ -157,11 +160,11 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
 
 
         val request = fakeRequest("http://localhost:8080/", "/", "GET", Map.empty)
-        httpServer().receive(request).send(fakeResponse(200, mutable.Map.empty), Context.Empty)
-        httpServer().receive(request).send(fakeResponse(302, mutable.Map.empty), Context.Empty)
-        httpServer().receive(request).send(fakeResponse(404, mutable.Map.empty), Context.Empty)
-        httpServer().receive(request).send(fakeResponse(504, mutable.Map.empty), Context.Empty)
-        httpServer().receive(request).send(fakeResponse(110, mutable.Map.empty), Context.Empty)
+        httpServer().createHandler(request).buildResponse(fakeResponse(200, mutable.Map.empty), Context.Empty)
+        httpServer().createHandler(request).buildResponse(fakeResponse(302, mutable.Map.empty), Context.Empty)
+        httpServer().createHandler(request).buildResponse(fakeResponse(404, mutable.Map.empty), Context.Empty)
+        httpServer().createHandler(request).buildResponse(fakeResponse(504, mutable.Map.empty), Context.Empty)
+        httpServer().createHandler(request).buildResponse(fakeResponse(110, mutable.Map.empty), Context.Empty)
 
         completedRequests(8081, 100).value() shouldBe 1L
         completedRequests(8081, 200).value() shouldBe 1L
@@ -173,17 +176,27 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
 
     "configured for distributed tracing" should {
       "create a span representing the current HTTP operation" in {
-        val handler = httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty))
-        handler.send(fakeResponse(200, mutable.Map.empty), handler.context)
+        val handler = httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty))
+        handler.buildResponse(fakeResponse(200, mutable.Map.empty), handler.context)
 
         val span = handler.span
+        span.operationName() shouldBe "default-name"
         span.tags().get(plain("http.method")) shouldBe "GET"
         span.tags().get(plain("http.url")) shouldBe "http://localhost:8080/"
-        span.tags().get(plain("http.status_code")) shouldBe "200"
+        span.tags().get(plainLong("http.status_code")) shouldBe 200
+      }
+
+      "allow deferring the sampling decision to a later stage" in {
+        val handler = httpServer().createHandler(
+          request = fakeRequest("http://localhost:8080/", "/", "GET", Map.empty),
+          deferSamplingDecision = true
+        )
+
+        handler.span.trace.samplingDecision shouldBe SamplingDecision.Unknown
       }
 
       "adopt a traceID when explicitly provided" in {
-        val handler = httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map(
+        val handler = httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map(
           "context-tags" -> "tag=value;none=0011223344556677;",
           "x-correlation-id" -> "0011223344556677"
         )))
@@ -192,22 +205,22 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
       }
 
       "record span metrics when enabled" in {
-        val handler = httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty))
-        handler.send(fakeResponse(200, mutable.Map.empty), handler.context)
+        val handler = httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty))
+        handler.buildResponse(fakeResponse(200, mutable.Map.empty), handler.context)
 
         handler.span.isTrackingMetrics() shouldBe true
       }
 
       "not record span metrics when disabled" in {
         val handler = noSpanMetricsHttpServer()
-          .receive(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty))
-        handler.send(fakeResponse(200, mutable.Map.empty), handler.context)
+          .createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map.empty))
+        handler.buildResponse(fakeResponse(200, mutable.Map.empty), handler.context)
 
         handler.span.isTrackingMetrics() shouldBe false
       }
 
       "receive tags from context when available" in {
-        val handler = httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map(
+        val handler = httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map(
           "context-tags" -> "tag=value;none=0011223344556677;initiator.name=superservice;",
           "custom-trace-id" -> "0011223344556677"
         )))
@@ -216,12 +229,12 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
       }
 
       "write trace identifiers on the responses" in {
-        val handler = httpServer().receive(fakeRequest("http://localhost:8080/", "/", "GET", Map(
+        val handler = httpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map(
           "x-correlation-id" -> "0011223344556677"
         )))
 
         val responseHeaders = mutable.Map.empty[String, String]
-        handler.send(fakeResponse(200, responseHeaders), handler.context)
+        handler.buildResponse(fakeResponse(200, responseHeaders), handler.context)
 
         responseHeaders.get("x-trace-id").value shouldBe "0011223344556677"
         responseHeaders.get("x-span-id") shouldBe defined
@@ -231,7 +244,7 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
     "all capabilities are disabled" should {
       "not read any context from the incoming requests" in {
         val httpServer = noopHttpServer()
-        val handler = httpServer.receive(fakeRequest("http://localhost:8080/", "/", "GET", Map(
+        val handler = httpServer.createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map(
           "context-tags" -> "tag=value;none=0011223344556677;",
           "custom-trace-id" -> "0011223344556677"
         )))
@@ -241,7 +254,7 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
 
       "not create any span to represent the server request" in {
         val httpServer = noopHttpServer()
-        val handler = httpServer.receive(fakeRequest("http://localhost:8080/", "/", "GET", Map(
+        val handler = httpServer.createHandler(fakeRequest("http://localhost:8080/", "/", "GET", Map(
           "context-tags" -> "tag=value;none=0011223344556677;",
           "custom-trace-id" -> "0011223344556677"
         )))
@@ -251,11 +264,11 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
 
       "not record any HTTP server metrics" in {
         val request = fakeRequest("http://localhost:8080/", "/", "GET", Map.empty)
-        noopHttpServer().receive(request).send(fakeResponse(200, mutable.Map.empty), Context.Empty)
-        noopHttpServer().receive(request).send(fakeResponse(302, mutable.Map.empty), Context.Empty)
-        noopHttpServer().receive(request).send(fakeResponse(404, mutable.Map.empty), Context.Empty)
-        noopHttpServer().receive(request).send(fakeResponse(504, mutable.Map.empty), Context.Empty)
-        noopHttpServer().receive(request).send(fakeResponse(110, mutable.Map.empty), Context.Empty)
+        noopHttpServer().createHandler(request).buildResponse(fakeResponse(200, mutable.Map.empty), Context.Empty)
+        noopHttpServer().createHandler(request).buildResponse(fakeResponse(302, mutable.Map.empty), Context.Empty)
+        noopHttpServer().createHandler(request).buildResponse(fakeResponse(404, mutable.Map.empty), Context.Empty)
+        noopHttpServer().createHandler(request).buildResponse(fakeResponse(504, mutable.Map.empty), Context.Empty)
+        noopHttpServer().createHandler(request).buildResponse(fakeResponse(110, mutable.Map.empty), Context.Empty)
 
         completedRequests(8083, 100).value() shouldBe 0L
         completedRequests(8083, 200).value() shouldBe 0L
@@ -269,9 +282,13 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
   val TestComponent = "http.server"
   val TestInterface = "0.0.0.0"
 
-  def httpServer(): HttpServer = HttpServer.of("default", component = TestComponent, interface = TestInterface, port = 8081)
-  def noSpanMetricsHttpServer(): HttpServer = HttpServer.of("no-span-metrics", component = TestComponent, interface = TestInterface, port = 8082)
-  def noopHttpServer(): HttpServer = HttpServer.of("noop", component = TestComponent, interface = TestInterface, port = 8083)
+  def httpServer(): HttpServerInstrumentation = HttpServerInstrumentation.from(ConfigFactory.empty(), TestComponent, TestInterface, port = 8081)
+
+  def noSpanMetricsHttpServer(): HttpServerInstrumentation = HttpServerInstrumentation.from(
+    Kamon.config().getConfig("kamon.instrumentation.http-server.no-span-metrics"), TestComponent, TestInterface, port = 8082)
+
+  def noopHttpServer(): HttpServerInstrumentation = HttpServerInstrumentation.from(
+    Kamon.config().getConfig("kamon.instrumentation.http-server.noop"), TestComponent, TestInterface, port = 8083)
 
   def fakeRequest(requestUrl: String, requestPath: String, requestMethod: String, headers: Map[String, String]): HttpMessage.Request =
     new HttpMessage.Request {
@@ -280,6 +297,8 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
       override def method: String = requestMethod
       override def read(header: String): Option[String] = headers.get(header)
       override def readAll(): Map[String, String] = headers
+      override def host: String = "localhost"
+      override def port: Int = 8081
     }
 
   def fakeResponse(responseStatusCode: Int, headers: mutable.Map[String, String]): HttpMessage.ResponseBuilder[HttpMessage.Response] =
@@ -290,7 +309,7 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
     }
 
   def completedRequests(port: Int, statusCode: Int): Counter = {
-    val metrics = HttpServer.Metrics.of(TestComponent, TestInterface, port)
+    val metrics = HttpServerMetrics.of(TestComponent, TestInterface, port)
 
     statusCode match {
       case sc if sc >= 100 && sc <= 199 => metrics.requestsInformational
@@ -302,21 +321,21 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
   }
 
   def openConnections(port: Int): RangeSampler =
-    HttpServer.Metrics.of(TestComponent, TestInterface, port).openConnections
+    HttpServerMetrics.of(TestComponent, TestInterface, port).openConnections
 
   def connectionUsage(port: Int): Histogram =
-    HttpServer.Metrics.of(TestComponent, TestInterface, port).connectionUsage
+    HttpServerMetrics.of(TestComponent, TestInterface, port).connectionUsage
 
   def connectionLifetime(port: Int): Timer =
-    HttpServer.Metrics.of(TestComponent, TestInterface, port).connectionLifetime
+    HttpServerMetrics.of(TestComponent, TestInterface, port).connectionLifetime
 
   def activeRequests(port: Int): RangeSampler =
-    HttpServer.Metrics.of(TestComponent, TestInterface, port).activeRequests
+    HttpServerMetrics.of(TestComponent, TestInterface, port).activeRequests
 
   def requestSize(port: Int): Histogram =
-    HttpServer.Metrics.of(TestComponent, TestInterface, port).requestSize
+    HttpServerMetrics.of(TestComponent, TestInterface, port).requestSize
 
   def responseSize(port: Int): Histogram =
-    HttpServer.Metrics.of(TestComponent, TestInterface, port).responseSize
+    HttpServerMetrics.of(TestComponent, TestInterface, port).responseSize
 
 }

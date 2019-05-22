@@ -3,12 +3,12 @@ package kamon.instrumentation.http
 import kamon.context.HttpPropagation.{HeaderReader, HeaderWriter}
 
 /**
-  * Base abstractions over HTTP messages.
+  * Interoperability abstractions to handle HTTP Request and Response messages.
   */
 object HttpMessage {
 
   /**
-    * Wrapper for HTTP Request messages.
+    * Adapter for reading information from a HTTP Request message.
     */
   trait Request extends HeaderReader {
 
@@ -26,10 +26,20 @@ object HttpMessage {
       * HTTP Method.
       */
     def method: String
+
+    /**
+      * Host that will be receiving the request.
+      */
+    def host: String
+
+    /**
+      * Port number at which the request was addressed.
+      */
+    def port: Int
   }
 
   /**
-    * Wrapper for HTTP response messages.
+    * Adapter for reading information from a HTTP response message.
     */
   trait Response {
 
@@ -49,13 +59,13 @@ object HttpMessage {
   trait Builder[Message] extends HeaderWriter {
 
     /**
-      * Returns a version a version of the HTTP message container all headers that have been written to the builder.
+      * Returns a new HTTP message containing all headers that have been written to the builder.
       */
     def build(): Message
   }
 
   /**
-    * Builder for HTTP Request messages.
+    * Builder for HTTP Request messages
     */
   trait RequestBuilder[Message] extends Request with Builder[Message]
 
@@ -63,4 +73,5 @@ object HttpMessage {
     * Builder for HTTP Response messages.
     */
   trait ResponseBuilder[Message] extends Response with Builder[Message]
+
 }
