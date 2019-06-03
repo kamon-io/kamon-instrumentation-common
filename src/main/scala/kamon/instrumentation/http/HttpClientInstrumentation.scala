@@ -187,7 +187,7 @@ object HttpClientInstrumentation {
 
       val defaultOperationName = config.getString("tracing.operations.default")
       val operationNameGenerator: Try[HttpOperationNameGenerator] = Try {
-        Kamon.createInstance[HttpOperationNameGenerator](config.getString("tracing.operations.name-generator")).get
+        ClassLoading.createInstance[HttpOperationNameGenerator](config.getString("tracing.operations.name-generator"))
       } recover {
         case t: Throwable =>
           _log.warn("Failed to create an HTTP Operation Name Generator, falling back to the default operation name", t)

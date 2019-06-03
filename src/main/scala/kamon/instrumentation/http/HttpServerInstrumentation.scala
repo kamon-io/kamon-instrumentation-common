@@ -38,6 +38,16 @@ import org.slf4j.LoggerFactory
 trait HttpServerInstrumentation {
 
   /**
+    * Returns the interface on which the HTTP Server is listening.
+    */
+  def interface(): String
+
+  /**
+    * Returns the port on which the HTTP server is listening.
+    */
+  def port(): Int
+
+  /**
     * Initiates handling of a HTTP request received by the server. The returned RequestHandler contains the Span that
     * represents the processing of the incoming HTTP request (if tracing is enabled) and the Context extracted from
     * HTTP headers (if context propagation is enabled).
@@ -176,7 +186,7 @@ object HttpServerInstrumentation {
 
   private val _defaultHttpServerConfiguration = "kamon.instrumentation.http-server.default"
 
-  private class Default(val settings: Settings, component: String, interface: String, port: Int)
+  private class Default(val settings: Settings, component: String, val interface: String, val port: Int)
       extends HttpServerInstrumentation {
 
     private val _metrics = if(settings.enableServerMetrics) Some(HttpServerMetrics.of(component, interface, port)) else None
@@ -333,6 +343,7 @@ object HttpServerInstrumentation {
     traceIDResponseHeader: Option[String],
     spanIDResponseHeader: Option[String],
     defaultOperationName: String,
+    unhandledOperationName: String,
     operationMappings: Map[Filter.Glob, String]
   )
 
@@ -363,6 +374,7 @@ object HttpServerInstrumentation {
       val spanIDResponseHeader = optionalString(config.getString("tracing.response-headers.span-id"))
 
       val defaultOperationName = config.getString("tracing.operations.default")
+      val unhandledOperationName = config.getString("tracing.operations.unhandled")
       val operationMappings = config.getConfig("tracing.operations.mappings").pairs.map {
         case (pattern, operationName) => (new Filter.Glob(pattern), operationName)
       }
@@ -381,6 +393,7 @@ object HttpServerInstrumentation {
         traceIDResponseHeader,
         spanIDResponseHeader,
         defaultOperationName,
+        unhandledOperationName,
         operationMappings
       )
     }
