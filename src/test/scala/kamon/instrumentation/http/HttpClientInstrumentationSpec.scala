@@ -42,7 +42,7 @@ class HttpClientInstrumentationSpec extends WordSpec with Matchers with Instrume
         handler.processResponse(fakeResponse(200))
 
         val span = handler.span
-        span.operationName() shouldBe "localhost"
+        span.operationName() shouldBe "GET"
         span.spanTags().get(plain("http.url")) shouldBe "http://localhost:8080/"
         span.metricTags().get(plain("http.method")) shouldBe "GET"
         span.metricTags().get(plainLong("http.status_code")) shouldBe 200
@@ -55,7 +55,7 @@ class HttpClientInstrumentationSpec extends WordSpec with Matchers with Instrume
         handler.processResponse(fakeResponse(500))
 
         val span = handler.span
-        span.operationName() shouldBe "localhost"
+        span.operationName() shouldBe "GET"
         span.spanTags().get(plain("http.url")) shouldBe "http://localhost:8080/"
         span.metricTags().get(plain("http.method")) shouldBe "GET"
         span.metricTags().get(plainBoolean("error")) shouldBe true

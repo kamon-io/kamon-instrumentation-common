@@ -8,14 +8,29 @@ import kamon.instrumentation.http.HttpMessage.Request
   */
 trait HttpOperationNameGenerator {
 
+  /**
+    * Returns the name to be assigned to the HTTP operation, or None if a name cannot be determined.
+    */
   def name(request: Request): Option[String]
 
 }
 
 object HttpOperationNameGenerator {
 
-  class Hostname extends HttpOperationNameGenerator {
+  /**
+    * Uses the request Host to assign a name.
+    */
+  object Hostname extends HttpOperationNameGenerator {
     override def name(request: Request): Option[String] =
       Option(request.host)
   }
+
+  /**
+    * Uses the request HTTP Method to assign a name.
+    */
+  object Method extends HttpOperationNameGenerator {
+    override def name(request: Request): Option[String] =
+      Option(request.method)
+  }
+
 }

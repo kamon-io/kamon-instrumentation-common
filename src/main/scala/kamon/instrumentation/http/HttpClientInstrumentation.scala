@@ -187,7 +187,11 @@ object HttpClientInstrumentation {
 
       val defaultOperationName = config.getString("tracing.operations.default")
       val operationNameGenerator: Try[HttpOperationNameGenerator] = Try {
-        ClassLoading.createInstance[HttpOperationNameGenerator](config.getString("tracing.operations.name-generator"))
+        config.getString("tracing.operations.name-generator") match {
+          case "hostname" => HttpOperationNameGenerator.Hostname
+          case "method"   => HttpOperationNameGenerator.Method
+          case fqcn       => ClassLoading.createInstance[HttpOperationNameGenerator](fqcn)
+        }
       } recover {
         case t: Throwable =>
           _log.warn("Failed to create an HTTP Operation Name Generator, falling back to the default operation name", t)
