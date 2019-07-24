@@ -208,7 +208,7 @@ object HttpServerInstrumentation {
       else Span.Empty
 
       val handlerContext = if(!requestSpan.isEmpty)
-        incomingContext.withKey(Span.Key, requestSpan)
+        incomingContext.withEntry(Span.Key, requestSpan)
       else incomingContext
 
       _metrics.foreach { httpServerMetrics =>

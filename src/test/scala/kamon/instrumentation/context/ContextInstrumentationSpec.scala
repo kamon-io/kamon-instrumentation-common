@@ -29,7 +29,7 @@ class ContextInstrumentationSpec extends WordSpec with Matchers {
 
     "automatically capture the current context when using the WithCurrentContextInitializer variant" in {
       val context = Context.of(TagSet.of("key", "value"))
-      val targetWithInitializer = Kamon.storeContext(context) {
+      val targetWithInitializer = Kamon.runWithContext(context) {
         (new TargetWithInitializer).asInstanceOf[HasContext]
       }
 
@@ -44,7 +44,7 @@ class ContextInstrumentationSpec extends WordSpec with Matchers {
       target.asInstanceOf[HasContext].context shouldBe Context.Empty
       targetWithInitializer.asInstanceOf[HasContext].context shouldBe Context.Empty
 
-      Kamon.storeContext(context) {
+      Kamon.runWithContext(context) {
         target.doSomething()
         targetWithInitializer.doSomething()
       }
@@ -56,7 +56,7 @@ class ContextInstrumentationSpec extends WordSpec with Matchers {
     "use the captured context while running methods advised with the RunWithContextAdvice" in {
       val context = Context.of(TagSet.of("key", "value"))
 
-      val (target, targetWithInitializer) = Kamon.storeContext(context) {
+      val (target, targetWithInitializer) = Kamon.runWithContext(context) {
         (new Target, new TargetWithInitializer)
       }
 

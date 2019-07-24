@@ -101,8 +101,8 @@ object HttpClientInstrumentation {
       val requestSpan: Span = {
         if (settings.enableContextPropagation) {
           val contextToPropagate = if (settings.enableTracing)
-            context.withKey(Span.Key, createClientSpan(requestBuilder, context))
-          else context.withoutKey(Span.Key)
+            context.withEntry(Span.Key, createClientSpan(requestBuilder, context))
+          else context.withoutEntry(Span.Key)
 
           _propagation.write(contextToPropagate, requestBuilder)
           contextToPropagate.get(Span.Key)
