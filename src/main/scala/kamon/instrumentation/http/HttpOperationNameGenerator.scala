@@ -33,4 +33,12 @@ object HttpOperationNameGenerator {
       Option(request.method)
   }
 
+  /**
+    * Uses a static name.
+    */
+  class Static(name:String) extends HttpOperationNameGenerator {
+    override def name(request: Request): Option[String] =
+      Option(name)
+  }
+
 }

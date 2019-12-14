@@ -16,6 +16,8 @@ import kamon.trace.Trace.SamplingDecision
 import kamon.util.Filter
 import org.slf4j.LoggerFactory
 
+import scala.util.Try
+
 
 /**
   * HTTP Server instrumentation handler that takes care of context propagation, distributed tracing and HTTP server
@@ -113,6 +115,8 @@ trait HttpServerInstrumentation {
 
 object HttpServerInstrumentation {
 
+  private val _log = LoggerFactory.getLogger(classOf[Default])
+  
   /**
     * Handler associated to the processing of a single request. The instrumentation code using this class is responsible
     * of creating a dedicated `HttpServer.RequestHandler` instance for each received request and invoking the
@@ -315,15 +319,18 @@ object HttpServerInstrumentation {
             .foreach(tagValue => SpanTagger.tag(span, tagName, tagValue, mode))
       }
 
+      
       span.start()
     }
 
     private def operationName(request: HttpMessage.Request): String = {
       val requestPath = request.path
+      //first apply any mappings rules
       val customMapping = settings.operationMappings.collectFirst {
         case (pattern, operationName) if pattern.accept(requestPath) => operationName
-      }
-
+      }.orElse( //fallback to use any configured name generator
+        settings.operationNameGenerator.name(request)
+     )
       customMapping.getOrElse(settings.defaultOperationName)
     }
   }
@@ -344,7 +351,8 @@ object HttpServerInstrumentation {
     spanIDResponseHeader: Option[String],
     defaultOperationName: String,
     unhandledOperationName: String,
-    operationMappings: Map[Filter.Glob, String]
+    operationMappings: Map[Filter.Glob, String],
+    operationNameGenerator: HttpOperationNameGenerator
   )
 
   object Settings {
@@ -374,6 +382,17 @@ object HttpServerInstrumentation {
       val spanIDResponseHeader = optionalString(config.getString("tracing.response-headers.span-id"))
 
       val defaultOperationName = config.getString("tracing.operations.default")
+      val operationNameGenerator: Try[HttpOperationNameGenerator] = Try {
+        config.getString("tracing.operations.name-generator") match {
+          case "default" => new HttpOperationNameGenerator.Static(defaultOperationName)
+          case "method" => HttpOperationNameGenerator.Method
+          case fqcn => ClassLoading.createInstance[HttpOperationNameGenerator](fqcn)
+        }
+      } recover {
+        case t: Throwable =>
+          _log.warn("Failed to create an HTTP Operation Name Generator, falling back to the default operation name", t)
+          new HttpOperationNameGenerator.Static(defaultOperationName)
+      }
       val unhandledOperationName = config.getString("tracing.operations.unhandled")
       val operationMappings = config.getConfig("tracing.operations.mappings").pairs.map {
         case (pattern, operationName) => (new Filter.Glob(pattern), operationName)
@@ -394,7 +413,8 @@ object HttpServerInstrumentation {
         spanIDResponseHeader,
         defaultOperationName,
         unhandledOperationName,
-        operationMappings
+        operationMappings,
+        operationNameGenerator.get
       )
     }
   }

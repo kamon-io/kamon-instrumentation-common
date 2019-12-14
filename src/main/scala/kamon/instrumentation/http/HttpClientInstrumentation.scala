@@ -195,10 +195,7 @@ object HttpClientInstrumentation {
       } recover {
         case t: Throwable =>
           _log.warn("Failed to create an HTTP Operation Name Generator, falling back to the default operation name", t)
-
-          new HttpOperationNameGenerator {
-            override def name(request: HttpMessage.Request): Option[String] = Some(defaultOperationName)
-          }
+          new HttpOperationNameGenerator.Static(defaultOperationName)
       }
 
       Settings(
