@@ -250,6 +250,22 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
         span.tags().get(plain("http.url")) shouldBe "http://localhost:8080/"
         span.tags().get(plainLong("http.status_code")) shouldBe 200
       }
+
+      "use the HTTP method as operation name when provided as operation name generator" in {
+        val handler = methodNamingHttpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "PUT", Map.empty))
+        handler.buildResponse(fakeResponse(200, mutable.Map.empty), handler.context)
+
+        val span = handler.span
+        span.operationName() shouldBe "PUT"
+      }
+
+      "use the generated operation name when provided custom operation name generator is configured" in {
+        val handler = customNamingHttpServer().createHandler(fakeRequest("http://localhost:8080/", "/", "PUT", Map.empty))
+        handler.buildResponse(fakeResponse(200, mutable.Map.empty), handler.context)
+
+        val span = handler.span
+        span.operationName() shouldBe "localhost:PUT"
+      }
     }
 
     "all capabilities are disabled" should {
@@ -301,6 +317,12 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
   def noopHttpServer(): HttpServerInstrumentation = HttpServerInstrumentation.from(
     Kamon.config().getConfig("kamon.instrumentation.http-server.noop"), TestComponent, TestInterface, port = 8083)
 
+  def methodNamingHttpServer(): HttpServerInstrumentation = HttpServerInstrumentation.from(
+    Kamon.config().getConfig("kamon.instrumentation.http-server.with-method-operation-name-generator"), TestComponent, TestInterface, port = 8084)
+
+  def customNamingHttpServer(): HttpServerInstrumentation = HttpServerInstrumentation.from(
+    Kamon.config().getConfig("kamon.instrumentation.http-server.with-custom-operation-name-generator"), TestComponent, TestInterface, port = 8084)
+
   def fakeRequest(requestUrl: String, requestPath: String, requestMethod: String, headers: Map[String, String]): HttpMessage.Request =
     new HttpMessage.Request {
       override def url: String = requestUrl
@@ -349,4 +371,10 @@ class HttpServerInstrumentationSpec extends WordSpec with Matchers with Instrume
   def responseSize(port: Int): Histogram =
     HttpServerMetrics.of(TestComponent, TestInterface, port).responseSize
 
+}
+
+class DedicatedNameGenerator extends HttpOperationNameGenerator {
+  override def name(request: HttpMessage.Request): Option[String] = {
+    Some(request.host + ":" + request.method)
+  }
 }
