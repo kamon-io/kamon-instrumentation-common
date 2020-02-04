@@ -24,6 +24,15 @@ object HttpOperationNameGenerator {
     override def name(request: Request): Option[String] =
       Option(request.host)
   }
+ 
+ /**
+    * Uses the request Host to assign a name.
+    */
+  object HostnameAndPort extends HttpOperationNameGenerator {
+    override def name(request: Request): Option[String] =
+      Option(request.host).map(h => s"$h${request.port}")
+  }
+
 
   /**
     * Uses the request HTTP Method to assign a name.
