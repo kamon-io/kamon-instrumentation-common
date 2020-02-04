@@ -26,7 +26,7 @@ object HttpOperationNameGenerator {
   }
  
  /**
-    * Uses the request Host to assign a name.
+    * Uses the request Host and Port to assign a name.
     */
   object HostnameAndPort extends HttpOperationNameGenerator {
     override def name(request: Request): Option[String] =
