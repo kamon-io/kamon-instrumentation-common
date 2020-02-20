@@ -30,7 +30,7 @@ object HttpOperationNameGenerator {
     */
   object HostnameAndPort extends HttpOperationNameGenerator {
     override def name(request: Request): Option[String] =
-      Option(request.host).map(h => s"$h${request.port}")
+      Option(request.host).map(h => s"$h:${request.port}")
   }
 
 
